@@ -7,6 +7,13 @@ fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     println!(
         "cargo:SHIM={}",
+        PathBuf::from(&manifest_dir)
+            .join("src/freertos")
+            .to_str()
+            .unwrap()
+    );
+    println!(
+        "cargo:WRAPPER={}",
         PathBuf::from(manifest_dir)
             .join("src/freertos")
             .to_str()

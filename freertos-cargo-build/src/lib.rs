@@ -1,3 +1,5 @@
+extern crate bindgen;
+
 use cc::Build;
 use std::fmt::Display;
 use std::{fmt, env};
@@ -20,11 +22,14 @@ const ENV_KEY_FREERTOS_CONFIG: &str = "DEP_FREERTOS_CONFIG";
 /// This variable is set by freertos-rust build.rs
 const ENV_KEY_FREERTOS_SHIM: &str = "DEP_FREERTOS_SHIM";
 
+const ENV_KEY_FREERTOS_WRAPPER: &str = "DEP_FREERTOS_WRAPPER";
+
 #[derive(Clone, Debug)]
 pub struct Builder {
     freertos_dir: PathBuf,
     freertos_config_dir: PathBuf,
     freertos_shim: PathBuf,
+    freertos_wrapper: PathBuf,
     freertos_port: Option<PathBuf>,
     // name of the heap_?.c file
     heap_c: PathBuf,
@@ -62,12 +67,14 @@ impl Builder {
         let freertos_path = env::var(ENV_KEY_FREERTOS_SRC).unwrap_or_default();
         let freertos_config_path = env::var(ENV_KEY_FREERTOS_CONFIG).unwrap_or_default();
         let freertos_shim = env::var(ENV_KEY_FREERTOS_SHIM).unwrap_or_default();
+        let freertos_wrapper = env::var(ENV_KEY_FREERTOS_WRAPPER).unwrap_or_default();
         let freertos_port_base = PathBuf::from(&freertos_path).join("portable");
 
         let b = Builder {
             freertos_dir: PathBuf::from(freertos_path),
             freertos_config_dir: PathBuf::from(freertos_config_path),
             freertos_shim: PathBuf::from(freertos_shim),
+            freertos_wrapper: PathBuf::from(freertos_wrapper),
             freertos_port: None,
             cc: cc::Build::new(),
             heap_c: PathBuf::from("heap_4.c"),
@@ -206,6 +213,9 @@ impl Builder {
     fn shim_c_file(&self) -> PathBuf {
         self.freertos_shim.join("shim.c")
     }
+    fn wrapper_h_file(&self) -> PathBuf {
+        self.freertos_wrapper.join("wrapper.h")
+    }
 
     /// Check that all required files and paths exist
     fn verify_paths(&self) -> Result<(), Error> {
@@ -264,6 +274,34 @@ impl Builder {
         });
 
         b.try_compile("freertos").map_err(|e| Error::new(&format!("{}", e)))?;
+
+        // Tell cargo to invalidate the built crate whenever the wrapper changes
+        // println!("cargo:rerun-if-changed=wrapper.h");
+
+        // The bindgen::Builder is the main entry point
+        // to bindgen, and lets you build up options for
+        // the resulting bindings.
+        // panic!("-I{}",self.freertos_include_dir().to_str().unwrap());
+        let bindings = bindgen::Builder::default()
+            // The input header we would like to generate
+            // bindings for.
+            .header(self.wrapper_h_file().to_str().unwrap())
+            .clang_arg(format!("-I{}",self.freertos_include_dir().to_str().unwrap()))
+            // .clang_arg("-Iexamples/linux")
+            // .clang_arg("-Ifreertos-addons/Linux/portable/GCC/Linux")
+            // Tell cargo to invalidate the built crate whenever any of the
+            // included header files changed.
+            .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+            // Finish the builder and generate the bindings.
+            .generate()
+            // Unwrap the Result and panic on failure.
+            .expect("Unable to generate bindings");
+            
+        // Write the bindings to the $OUT_DIR/bindings.rs file.
+        let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+        bindings
+            .write_to_file(out_path.join("bindings.rs"))
+            .expect("Couldn't write bindings!");
 
         Ok(())
     }
