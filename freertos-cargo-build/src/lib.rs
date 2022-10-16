@@ -287,8 +287,8 @@ impl Builder {
             // bindings for.
             .header(self.wrapper_h_file().to_str().unwrap())
             .clang_arg(format!("-I{}",self.freertos_include_dir().to_str().unwrap()))
-            // .clang_arg("-Iexamples/linux")
-            // .clang_arg("-Ifreertos-addons/Linux/portable/GCC/Linux")
+            .clang_arg(format!("-I{}",self.freertos_config_dir.to_str().unwrap()))
+            .clang_arg(format!("-I{}",self.get_freertos_port_dir().to_str().unwrap()))
             // Tell cargo to invalidate the built crate whenever any of the
             // included header files changed.
             .parse_callbacks(Box::new(bindgen::CargoCallbacks))
